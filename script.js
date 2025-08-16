@@ -42,6 +42,11 @@ window.onload = function() {
     
     // 显示最高分
     highScoreDisplay.textContent = highScore;
+
+    // 获取音效元素
+    eatSound = document.getElementById('eat-sound');
+    gameOverSound = document.getElementById('game-over-sound');
+    clickSound = document.getElementById('click-sound');
     
     // 绘制初始空白游戏板
     drawBoard();
@@ -247,6 +252,16 @@ function endGame() {
     ctx.fillText(`最终得分: ${score}`, canvas.width / 2, canvas.height / 2 + 20);
 }
 
+// 播放音效
+function playSound(sound) {
+    if (sound) {
+        sound.currentTime = 0;
+        sound.play().catch(error => {
+            console.error("音频播放失败:", error);
+        });
+    }
+}
+
 // 暂停/继续游戏
 function togglePause() {
     if (gameOver) return;
@@ -306,7 +321,9 @@ function handleKeyPress(event) {
     // 如果游戏暂停，则忽略其他按键
     if (isPaused) return;
 
-    // 根据按键设置下一个方向
+    playSound(clickSound);
+
+     // 根据按键设置下一个方向
     // 确保蛇不能直接掉头（例如，向右移动时不能直接向左转）
     switch(event.keyCode) {
         // 上箭头或 W
