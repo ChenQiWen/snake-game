@@ -51,14 +51,48 @@ window.onload = function() {
 function startGame() {
     if (!gameOver && !isPaused) return;
     
+    // --- 新增：随机生成蛇的初始位置和方向 ---
+    let startX, startY, startDirection;
+    let snakeParts = [];
+    let validStart = false;
+
+    while (!validStart) {
+        // 随机生成蛇头位置
+        startX = Math.floor(Math.random() * (canvas.width / GRID_SIZE));
+        startY = Math.floor(Math.random() * (canvas.height / GRID_SIZE));
+
+        // 随机生成初始方向
+        const directions = ['up', 'down', 'left', 'right'];
+        startDirection = directions[Math.floor(Math.random() * directions.length)];
+
+        // 根据方向和头部位置，计算蛇的初始身体部分
+        snakeParts = [{ x: startX, y: startY }];
+        let currentX = startX;
+        let currentY = startY;
+
+        // 假设初始长度为3
+        for (let i = 0; i < 2; i++) {
+            switch (startDirection) {
+                case 'up':    currentY++; break;
+                case 'down':  currentY--; break;
+                case 'left':  currentX++; break;
+                case 'right': currentX--; break;
+            }
+            snakeParts.push({ x: currentX, y: currentY });
+        }
+
+        // 检查蛇的所有部分是否都在游戏板内
+        validStart = snakeParts.every(part =>
+            part.x >= 0 && part.x < (canvas.width / GRID_SIZE) &&
+            part.y >= 0 && part.y < (canvas.height / GRID_SIZE)
+        );
+    }
+    // --- 随机生成结束 ---
+    
     // 重置游戏状态
-    snake = [
-        {x: 5, y: 10},
-        {x: 4, y: 10},
-        {x: 3, y: 10}
-    ];
-    direction = 'right';
-    nextDirection = 'right';
+    snake = snakeParts;
+    direction = startDirection;
+    nextDirection = startDirection;
     score = 0;
     gameOver = false;
     isPaused = false;
@@ -216,21 +250,22 @@ function endGame() {
 // 暂停/继续游戏
 function togglePause() {
     if (gameOver) return;
-    
+
     isPaused = !isPaused;
     pauseBtn.textContent = isPaused ? '继续' : '暂停';
-    
+
+    // 总是先清除现有的 interval
+    clearInterval(gameInterval);
+
     if (!isPaused) {
         // 继续游戏循环
         gameInterval = setInterval(gameLoop, GAME_SPEED[currentSpeed]);
     } else {
-        // 暂停游戏循环
-        clearInterval(gameInterval);
-        
+        // 如果是暂停，则显示暂停信息
         // 显示暂停信息
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
+
         ctx.font = '30px Arial';
         ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
@@ -251,14 +286,26 @@ function changeSpeed() {
 
 // 处理键盘输入
 function handleKeyPress(event) {
-    // 防止方向键滚动页面
-    if ([37, 38, 39, 40, 65, 87, 68, 83].includes(event.keyCode)) {
+    // 防止方向键和空格键滚动页面
+    if ([37, 38, 39, 40, 65, 87, 68, 83, 32].includes(event.keyCode)) {
         event.preventDefault();
     }
-    
-    // 如果游戏结束或暂停，忽略键盘输入
-    if (gameOver || isPaused) return;
-    
+
+    // 如果游戏结束，按任意键重新开始
+    if (gameOver) {
+        startGame();
+        return;
+    }
+
+    // 空格键 - 暂停/继续
+    if (event.keyCode === 32) {
+        togglePause();
+        return; // 处理完暂停后直接返回
+    }
+
+    // 如果游戏暂停，则忽略其他按键
+    if (isPaused) return;
+
     // 根据按键设置下一个方向
     // 确保蛇不能直接掉头（例如，向右移动时不能直接向左转）
     switch(event.keyCode) {
@@ -281,10 +328,6 @@ function handleKeyPress(event) {
         case 39:
         case 68:
             if (direction !== 'left') nextDirection = 'right';
-            break;
-        // 空格键 - 暂停/继续
-        case 32:
-            togglePause();
             break;
     }
 }
