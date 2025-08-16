@@ -12,6 +12,7 @@ const FOOD_TYPES = {
     NORMAL: { color: '#F44336', score: 10 },
     BONUS: { color: '#FFC107', score: 50 },
     SPEED_UP: { color: '#03A9F4', score: 10, speedMultiplier: 0.7, duration: 5000 },
+    SLOW_DOWN: { color: '#9E9E9E', score: 10, speedMultiplier: 1.3, duration: 5000 },
     INVINCIBLE: { color: '#FFD700', score: 20, duration: 5000 }
 };
 const KEY_CODES = {
@@ -19,6 +20,7 @@ const KEY_CODES = {
     LEFT_ARROW: 37, UP_ARROW: 38, RIGHT_ARROW: 39, DOWN_ARROW: 40,
     A: 65, W: 87, D: 68, S: 83
 };
+const BOARD_SHRINK_THRESHOLDS = [100, 250, 500];
 
 // =================================================================================
 // 游戏状态变量 (Game State Variables)
@@ -40,6 +42,7 @@ let currentSpeed = 'medium';
 let speedBoostTimeout;
 let isInvincible = false;
 let invincibleTimeout;
+let shrinkLevel = 0;
 
 // =================================================================================
 // DOM 元素 (DOM Elements)
@@ -178,6 +181,7 @@ function resetGameState() {
     gameOver = false;
     isPaused = false;
     isInvincible = false;
+    shrinkLevel = 0;
 }
 
 /**
@@ -283,8 +287,8 @@ function checkCollision() {
     const head = snake[0];
     
     // 墙壁碰撞
-    if (head.x < 0 || head.x >= canvas.width / GRID_SIZE ||
-        head.y < 0 || head.y >= canvas.height / GRID_SIZE) {
+    if (head.x < shrinkLevel || head.x >= canvas.width / GRID_SIZE - shrinkLevel ||
+        head.y < shrinkLevel || head.y >= canvas.height / GRID_SIZE - shrinkLevel) {
         return true;
     }
     
@@ -333,9 +337,22 @@ function eatFood() {
 
     // 应用食物的特殊效果
     applyFoodEffect(foodType);
+
+    // 检查是否达到缩小边界的分数
+    checkAndShrinkBoard();
     
     // 生成新的食物
     generateFood();
+}
+
+/**
+ * 检查并根据分数缩小游戏边界
+ */
+function checkAndShrinkBoard() {
+    if (shrinkLevel < BOARD_SHRINK_THRESHOLDS.length && score >= BOARD_SHRINK_THRESHOLDS[shrinkLevel]) {
+        shrinkLevel++;
+        // 可选：在这里添加一个音效或视觉效果来提示玩家
+    }
 }
 
 /**
@@ -343,7 +360,7 @@ function eatFood() {
  * @param {object} foodType - 食物类型对象
  */
 function applyFoodEffect(foodType) {
-    if (food.type === 'SPEED_UP') {
+    if (food.type === 'SPEED_UP' || food.type === 'SLOW_DOWN') {
         if (speedBoostTimeout) clearTimeout(speedBoostTimeout);
         
         clearInterval(gameInterval);
@@ -378,8 +395,8 @@ function generateObstacles() {
         do {
             isInvalidPosition = false;
             obstacle = {
-                x: Math.floor(Math.random() * (canvas.width / GRID_SIZE)),
-                y: Math.floor(Math.random() * (canvas.height / GRID_SIZE))
+                x: Math.floor(Math.random() * (canvas.width / GRID_SIZE - shrinkLevel * 2)) + shrinkLevel,
+                y: Math.floor(Math.random() * (canvas.height / GRID_SIZE - shrinkLevel * 2)) + shrinkLevel
             };
             
             // 检查新位置是否与蛇或现有障碍物重叠
@@ -401,8 +418,8 @@ function generateFood() {
     do {
         isInvalidPosition = false;
         newFood = {
-            x: Math.floor(Math.random() * (canvas.width / GRID_SIZE)),
-            y: Math.floor(Math.random() * (canvas.height / GRID_SIZE))
+            x: Math.floor(Math.random() * (canvas.width / GRID_SIZE - shrinkLevel * 2)) + shrinkLevel,
+            y: Math.floor(Math.random() * (canvas.height / GRID_SIZE - shrinkLevel * 2)) + shrinkLevel
         };
         
         // 检查新位置是否与蛇或障碍物重叠
@@ -413,9 +430,10 @@ function generateFood() {
 
     // 随机决定食物类型
     const rand = Math.random();
-    if (rand < 0.65) newFood.type = 'NORMAL';
-    else if (rand < 0.85) newFood.type = 'BONUS';
-    else if (rand < 0.95) newFood.type = 'SPEED_UP';
+    if (rand < 0.60) newFood.type = 'NORMAL';
+    else if (rand < 0.75) newFood.type = 'BONUS';
+    else if (rand < 0.85) newFood.type = 'SPEED_UP';
+    else if (rand < 0.95) newFood.type = 'SLOW_DOWN';
     else newFood.type = 'INVINCIBLE';
     
     food = newFood;
@@ -428,6 +446,10 @@ function generateFood() {
  * @returns {boolean}
  */
 function isPositionOccupied(position, occupiedArray) {
+    if (position.x < shrinkLevel || position.x >= canvas.width / GRID_SIZE - shrinkLevel ||
+        position.y < shrinkLevel || position.y >= canvas.height / GRID_SIZE - shrinkLevel) {
+        return true;
+    }
     return occupiedArray.some(item => item.x === position.x && item.y === position.y);
 }
 
@@ -456,6 +478,15 @@ function drawBoard() {
     ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
+    // 绘制缩小的边界
+    if (shrinkLevel > 0) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillRect(0, 0, canvas.width, shrinkLevel * GRID_SIZE);
+        ctx.fillRect(0, 0, shrinkLevel * GRID_SIZE, canvas.height);
+        ctx.fillRect(canvas.width - shrinkLevel * GRID_SIZE, 0, shrinkLevel * GRID_SIZE, canvas.height);
+        ctx.fillRect(0, canvas.height - shrinkLevel * GRID_SIZE, canvas.width, shrinkLevel * GRID_SIZE);
+    }
+
     // 绘制网格线
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
     ctx.lineWidth = 0.5;
