@@ -1,15 +1,67 @@
-name: Gemini CLI
-on: pull_request
+name: Gemini AI 自动化工作流
 
+# 触发器：这个工作流会在以下情况自动执行
+于:
+  # 当有新的拉取请求（PR）被打开或更新时
+  pull_request:
+    # 限制在特定的分支上执行，例如只在 main 分支的 PR 上
+    分支: [ main ]
+    # 限制只在 PR 发生特定类型事件时执行，例如打开、同步或重新打开
+    types: [ opened, synchronize, reopened ]
+  # 也可以手动触发，方便调试
+  workflow_dispatch:
+
+# 定义工作任务
 jobs:
-  review:
+  # 任务1: 代码审查
+  code-review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          # 必须获取所有提交历史，以便 Gemini 理解代码改动
+          fetch-depth: 0
+
+      - name: 运行 Gemini 审查代码
+        uses: google-github-actions/run-gemini-cli@v0
+        with:
+          api_key: ${{ secrets.GEMINI_API_KEY }}
+          # 结合你的前端工程师身份，给出更具体的指令
+          prompt: |
+            你是一位经验丰富的Web前端架构师，拥有10年以上的开发经验。
+            请对本次拉取请求的代码改动进行全面审查。
+            审查内容包括但不限于：
+            1. 代码风格和可读性。
+            2. 是否遵循了通用的前端最佳实践。
+            3. 是否存在潜在的性能问题或安全漏洞。
+            4. 架构上是否合理，是否有优化的空间。
+            5. 如果是新的组件或功能，其设计模式是否可扩展和可维护。
+            请用清晰、直接的语言给出你的审查意见，并提出具体的改进建议和代码示例（如果需要）。
+
+  # 任务2: 自动生成 PR 摘要
+  pr-summary:
+    # 这个任务在 code-review 任务成功完成后才执行
+    needs: code-review
+    # 仅在 PR 是由非机器人用户创建时运行
+    if: ${{ github.event.pull_request.user.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: google-github-actions/run-gemini-cli@v0
+      - name: 运行 Gemini 生成摘要
+        uses: google-github-actions/run-gemini-cli@v0
         with:
           api_key: ${{ secrets.GEMINI_API_KEY }}
-          prompt: "请以一个资深前端工程师的角度，审查这个 PR 的代码，并给出简洁的改进建议。"
+          prompt: |
+            本次拉取请求的代码改动包含多个文件。请你作为一位技术文档专家，
+            分析所有改动并生成一份简洁、易懂的拉取请求摘要。
+            摘要内容应包括：
+            - 主要的改动点是什么？
+            - 为什么要做这些改动？
+            - 对项目有什么影响？
+            - 如果有相关的任务ID，请一并列出。
+            请确保你的回答直接、准确，不需要多余的客套话。
