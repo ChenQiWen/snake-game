@@ -1,0 +1,34 @@
+{
+  "name": "@chenqiwen/snake-game",
+  "version": "1.0.0",
+  "description": "A classic snake game implemented in HTML, CSS, and JavaScript.",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChenQiWen/snake-game.git"
+  },
+  "keywords": [
+    "snake",
+    "game",
+    "javascript"
+  ],
+  "author": "ChenQiWen",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ChenQiWen/snake-game/issues"
+  },
+  "homepage": "https://github.com/ChenQiWen/snake-game#readme",
+  "files": [
+    "index.html",
+    "style.css",
+    "script.js",
+    "sounds/"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
