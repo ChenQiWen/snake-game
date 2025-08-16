@@ -11,7 +11,8 @@ const GAME_SPEED = {
 const FOOD_TYPES = {
     NORMAL: { color: '#F44336', score: 10 },
     BONUS: { color: '#FFC107', score: 50 },
-    SPEED_UP: { color: '#03A9F4', score: 10, speedMultiplier: 0.7, duration: 5000 }
+    SPEED_UP: { color: '#03A9F4', score: 10, speedMultiplier: 0.7, duration: 5000 },
+    INVINCIBLE: { color: '#FFD700', score: 20, duration: 5000 }
 };
 const KEY_CODES = {
     SPACE: 32,
@@ -37,6 +38,8 @@ let gameOver = true;
 let isCountingDown = false;
 let currentSpeed = 'medium';
 let speedBoostTimeout;
+let isInvincible = false;
+let invincibleTimeout;
 
 // =================================================================================
 // DOM 元素 (DOM Elements)
@@ -170,9 +173,11 @@ function initializeSnake() {
  */
 function resetGameState() {
     if (speedBoostTimeout) clearTimeout(speedBoostTimeout);
+    if (invincibleTimeout) clearTimeout(invincibleTimeout);
     score = 0;
     gameOver = false;
     isPaused = false;
+    isInvincible = false;
 }
 
 /**
@@ -240,7 +245,9 @@ function gameLoop() {
 function endGame() {
     playSound(gameOverSound);
     if (speedBoostTimeout) clearTimeout(speedBoostTimeout);
+    if (invincibleTimeout) clearTimeout(invincibleTimeout);
     gameOver = true;
+    isInvincible = false;
     pauseBtn.disabled = true;
     clearInterval(gameInterval);
     drawGameOverScreen();
@@ -271,6 +278,8 @@ function moveSnake() {
  * @returns {boolean} - 如果发生碰撞则返回 true
  */
 function checkCollision() {
+    if (isInvincible) return false;
+
     const head = snake[0];
     
     // 墙壁碰撞
@@ -344,6 +353,12 @@ function applyFoodEffect(foodType) {
             clearInterval(gameInterval);
             gameInterval = setInterval(gameLoop, GAME_SPEED[currentSpeed]);
         }, foodType.duration);
+    } else if (food.type === 'INVINCIBLE') {
+        isInvincible = true;
+        if (invincibleTimeout) clearTimeout(invincibleTimeout);
+        invincibleTimeout = setTimeout(() => {
+            isInvincible = false;
+        }, foodType.duration);
     }
 }
 
@@ -398,9 +413,10 @@ function generateFood() {
 
     // 随机决定食物类型
     const rand = Math.random();
-    if (rand < 0.7) newFood.type = 'NORMAL';
-    else if (rand < 0.9) newFood.type = 'BONUS';
-    else newFood.type = 'SPEED_UP';
+    if (rand < 0.65) newFood.type = 'NORMAL';
+    else if (rand < 0.85) newFood.type = 'BONUS';
+    else if (rand < 0.95) newFood.type = 'SPEED_UP';
+    else newFood.type = 'INVINCIBLE';
     
     food = newFood;
 }
@@ -475,7 +491,12 @@ function drawObstacles() {
  */
 function drawSnake() {
     snake.forEach((segment, index) => {
-        ctx.fillStyle = index === 0 ? '#388E3C' : '#4CAF50';
+        if (isInvincible) {
+            const hue = (Date.now() / 10 + index * 20) % 360;
+            ctx.fillStyle = `hsl(${hue}, 90%, 60%)`;
+        } else {
+            ctx.fillStyle = index === 0 ? '#388E3C' : '#4CAF50';
+        }
         roundRect(ctx, segment.x * GRID_SIZE, segment.y * GRID_SIZE, GRID_SIZE, GRID_SIZE, 5, true);
         
         // 只为蛇头绘制眼睛
