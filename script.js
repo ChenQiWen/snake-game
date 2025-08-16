@@ -58,9 +58,13 @@ window.onload = function() {
 
 // 新增：调整画布尺寸
 function resizeCanvas() {
-    // 让画布填充窗口，同时保持网格的整数倍
+    const uiContainer = document.querySelector('.ui-container');
+    const uiHeight = uiContainer ? uiContainer.offsetHeight : 0;
+
+    // 让画布填充窗口的剩余空间，同时保持网格的整数倍
     const width = Math.floor(window.innerWidth / GRID_SIZE) * GRID_SIZE;
-    const height = Math.floor(window.innerHeight / GRID_SIZE) * GRID_SIZE;
+    const height = Math.floor((window.innerHeight - uiHeight) / GRID_SIZE) * GRID_SIZE;
+    
     canvas.width = width;
     canvas.height = height;
 
