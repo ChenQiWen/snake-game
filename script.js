@@ -23,6 +23,7 @@ let score = 0;
 let highScore = localStorage.getItem('snakeHighScore') || 0;
 let isPaused = false;
 let gameOver = true;
+let isCountingDown = false;
 let currentSpeed = 'medium';
 let speedBoostTimeout;
 
@@ -101,7 +102,9 @@ function showStartScreen() {
 
 // 开始游戏
 function startGame() {
-    if (!gameOver && !isPaused) return;
+    if (isCountingDown || (!gameOver && !isPaused)) return;
+    
+    isCountingDown = true;
     
     // --- 新增：随机生成蛇的初始位置和方向 ---
     let startX, startY, startDirection;
@@ -162,8 +165,44 @@ function startGame() {
     // 清除之前的游戏循环
     if (gameInterval) clearInterval(gameInterval);
     
-    // 开始游戏循环
-    gameInterval = setInterval(gameLoop, GAME_SPEED[currentSpeed]);
+    // 开始倒计时
+    runCountdown();
+}
+
+// 运行倒计时
+function runCountdown() {
+    let countdown = 3;
+
+    const countdownLoop = () => {
+        drawBoard();
+        drawObstacles();
+        drawSnake();
+        drawFood();
+        
+        if (countdown > 0) {
+            drawCountdown(countdown);
+            countdown--;
+            setTimeout(countdownLoop, 1000);
+        } else {
+            drawCountdown('Go!');
+            setTimeout(() => {
+                isCountingDown = false;
+                gameInterval = setInterval(gameLoop, GAME_SPEED[currentSpeed]);
+            }, 500);
+        }
+    };
+    countdownLoop();
+}
+
+// 绘制倒计时
+function drawCountdown(text) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = '80px Arial';
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 30);
 }
 
 // 游戏主循环
@@ -392,7 +431,7 @@ function playSound(sound) {
 
 // 暂停/继续游戏
 function togglePause() {
-    if (gameOver) return;
+    if (gameOver || isCountingDown) return;
 
     isPaused = !isPaused;
     pauseBtn.textContent = isPaused ? '继续' : '暂停';
@@ -447,7 +486,7 @@ function handleKeyPress(event) {
     }
 
     // 如果游戏暂停，则忽略其他按键
-    if (isPaused) return;
+    if (isPaused || isCountingDown) return;
 
     playSound(clickSound);
 
