@@ -10,6 +10,7 @@ const GAME_SPEED = {
 let canvas, ctx;
 let snake = [];
 let food = {};
+let invincibilityFood = null; // 新增：无敌道具
 let direction = 'right';
 let nextDirection = 'right';
 let gameInterval;
@@ -18,6 +19,8 @@ let highScore = localStorage.getItem('snakeHighScore') || 0;
 let isPaused = false;
 let gameOver = true;
 let currentSpeed = 'medium';
+let isInvincible = false; // 新增：无敌状态
+let invincibilityTimer; // 新增：无敌计时器
 
 // DOM 元素
 let startBtn, pauseBtn, speedSelect, scoreDisplay, highScoreDisplay;
@@ -75,6 +78,7 @@ function resizeCanvas() {
         drawBoard();
         drawSnake();
         drawFood();
+        if (invincibilityFood) drawInvincibilityFood();
     }
 }
 
@@ -140,6 +144,9 @@ function startGame() {
     score = 0;
     gameOver = false;
     isPaused = false;
+    isInvincible = false;
+    invincibilityFood = null;
+    clearTimeout(invincibilityTimer);
     
     // 更新 UI
     scoreDisplay.textContent = score;
@@ -179,11 +186,17 @@ function gameLoop() {
         // 如果没有吃到食物，移除蛇尾
         snake.pop();
     }
+
+    // 检查是否吃到无敌道具
+    if (invincibilityFood && snake[0].x === invincibilityFood.x && snake[0].y === invincibilityFood.y) {
+        eatInvincibilityFood();
+    }
     
     // 绘制游戏
     drawBoard();
     drawSnake();
     drawFood();
+    if (invincibilityFood) drawInvincibilityFood();
 }
 
 // 移动蛇
@@ -212,6 +225,8 @@ function moveSnake() {
 
 // 检查碰撞
 function checkCollision() {
+    if (isInvincible) return false; // 如果无敌，则不检查碰撞
+
     const head = snake[0];
     
     // 检查墙壁碰撞
@@ -253,7 +268,41 @@ function generateFood() {
     } while (foodOnSnake);
     
     food = newFood;
+
+    // 每100分，有几率生成一个无敌道具
+    if (score > 0 && score % 100 === 0 && !invincibilityFood) {
+        generateInvincibilityFood();
+    }
 }
+
+// 新增：生成无敌道具
+function generateInvincibilityFood() {
+    let newFood;
+    let foodOnSnake;
+    
+    do {
+        foodOnSnake = false;
+        newFood = {
+            x: Math.floor(Math.random() * (canvas.width / GRID_SIZE)),
+            y: Math.floor(Math.random() * (canvas.height / GRID_SIZE))
+        };
+        
+        // 确保道具不会生成在蛇身上或普通食物上
+        if (newFood.x === food.x && newFood.y === food.y) {
+            foodOnSnake = true;
+            continue;
+        }
+        for (let segment of snake) {
+            if (segment.x === newFood.x && segment.y === newFood.y) {
+                foodOnSnake = true;
+                break;
+            }
+        }
+    } while (foodOnSnake);
+    
+    invincibilityFood = newFood;
+}
+
 
 // 吃食物
 function eatFood() {
@@ -272,12 +321,29 @@ function eatFood() {
     generateFood();
 }
 
+// 新增：吃无敌道具
+function eatInvincibilityFood() {
+    playSound(eatSound);
+    invincibilityFood = null;
+    isInvincible = true;
+
+    // 清除之前的计时器
+    clearTimeout(invincibilityTimer);
+
+    // 5秒后恢复正常
+    invincibilityTimer = setTimeout(() => {
+        isInvincible = false;
+    }, 5000);
+}
+
+
 // 游戏结束
 function endGame() {
     playSound(gameOverSound);
     gameOver = true;
     pauseBtn.disabled = true;
     clearInterval(gameInterval);
+    clearTimeout(invincibilityTimer);
 
     // 绘制游戏结束信息
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -433,6 +499,11 @@ function drawBoard() {
 // 绘制蛇
 function drawSnake() {
     snake.forEach((segment, index) => {
+        // 如果无敌，蛇会闪烁
+        if (isInvincible) {
+            ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 100) * 0.2;
+        }
+        
         // 蛇头使用深绿色，身体使用绿色
         ctx.fillStyle = index === 0 ? '#388E3C' : '#4CAF50';
         
@@ -447,6 +518,9 @@ function drawSnake() {
             true
         );
         
+        // 恢复透明度
+        ctx.globalAlpha = 1.0;
+
         // 为蛇头添加眼睛
         if (index === 0) {
             ctx.fillStyle = 'white';
@@ -520,6 +594,53 @@ function drawFood() {
     );
     ctx.fill();
 }
+
+// 新增：绘制无敌道具
+function drawInvincibilityFood() {
+    const x = invincibilityFood.x * GRID_SIZE + GRID_SIZE / 2;
+    const y = invincibilityFood.y * GRID_SIZE + GRID_SIZE / 2;
+    const radius = GRID_SIZE / 2 - 2;
+    
+    // 绘制一个闪烁的星星
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Date.now() / 500); // 旋转
+    
+    ctx.fillStyle = `hsl(${Date.now() / 10 % 360}, 100%, 50%)`; // 彩虹色
+    ctx.strokeStyle = 'gold';
+    ctx.lineWidth = 2;
+    
+    drawStar(0, 0, 5, radius, radius / 2);
+    
+    ctx.restore();
+}
+
+// 新增：绘制星星的辅助函数
+function drawStar(cx, cy, spikes, outerRadius, innerRadius) {
+    let rot = Math.PI / 2 * 3;
+    let x = cx;
+    let y = cy;
+    let step = Math.PI / spikes;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerRadius);
+    for (let i = 0; i < spikes; i++) {
+        x = cx + Math.cos(rot) * outerRadius;
+        y = cy + Math.sin(rot) * outerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+
+        x = cx + Math.cos(rot) * innerRadius;
+        y = cy + Math.sin(rot) * innerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+    }
+    ctx.lineTo(cx, cy - outerRadius);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+}
+
 
 // 辅助函数：绘制圆角矩形
 function roundRect(ctx, x, y, width, height, radius, fill) {
