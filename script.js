@@ -15,6 +15,7 @@ const FOOD_TYPES = {
 let canvas, ctx;
 let snake = [];
 let food = {};
+let obstacles = [];
 let direction = 'right';
 let nextDirection = 'right';
 let gameInterval;
@@ -79,6 +80,7 @@ function resizeCanvas() {
         showStartScreen();
     } else {
         drawBoard();
+        drawObstacles();
         drawSnake();
         drawFood();
     }
@@ -153,7 +155,8 @@ function startGame() {
     startBtn.textContent = '重新开始';
     pauseBtn.disabled = false;
     
-    // 生成第一个食物
+    // 生成障碍物和食物
+    generateObstacles();
     generateFood();
     
     // 清除之前的游戏循环
@@ -189,6 +192,7 @@ function gameLoop() {
     
     // 绘制游戏
     drawBoard();
+    drawObstacles();
     drawSnake();
     drawFood();
 }
@@ -233,18 +237,57 @@ function checkCollision() {
             return true;
         }
     }
+
+    // 检查障碍物碰撞
+    for (let o of obstacles) {
+        if (head.x === o.x && head.y === o.y) {
+            return true;
+        }
+    }
     
     return false;
+}
+
+// 生成障碍物
+function generateObstacles() {
+    obstacles = [];
+    const numberOfObstacles = 5 + Math.floor(score / 100); // 障碍物数量随分数增加
+    for (let i = 0; i < numberOfObstacles; i++) {
+        let obstacle;
+        let onSnakeOrObstacle;
+        do {
+            onSnakeOrObstacle = false;
+            obstacle = {
+                x: Math.floor(Math.random() * (canvas.width / GRID_SIZE)),
+                y: Math.floor(Math.random() * (canvas.height / GRID_SIZE))
+            };
+            // 检查是否与蛇重叠
+            for (let segment of snake) {
+                if (segment.x === obstacle.x && segment.y === obstacle.y) {
+                    onSnakeOrObstacle = true;
+                    break;
+                }
+            }
+            // 检查是否与其他障碍物重叠
+            for (let o of obstacles) {
+                if (o.x === obstacle.x && o.y === obstacle.y) {
+                    onSnakeOrObstacle = true;
+                    break;
+                }
+            }
+        } while (onSnakeOrObstacle);
+        obstacles.push(obstacle);
+    }
 }
 
 // 生成食物
 function generateFood() {
     // 随机生成食物位置
     let newFood;
-    let foodOnSnake;
+    let foodOnSnakeOrObstacle;
     
     do {
-        foodOnSnake = false;
+        foodOnSnakeOrObstacle = false;
         newFood = {
             x: Math.floor(Math.random() * (canvas.width / GRID_SIZE)),
             y: Math.floor(Math.random() * (canvas.height / GRID_SIZE))
@@ -253,11 +296,19 @@ function generateFood() {
         // 确保食物不会生成在蛇身上
         for (let segment of snake) {
             if (segment.x === newFood.x && segment.y === newFood.y) {
-                foodOnSnake = true;
+                foodOnSnakeOrObstacle = true;
                 break;
             }
         }
-    } while (foodOnSnake);
+
+        // 确保食物不会生成在障碍物上
+        for (let o of obstacles) {
+            if (o.x === newFood.x && o.y === newFood.y) {
+                foodOnSnakeOrObstacle = true;
+                break;
+            }
+        }
+    } while (foodOnSnakeOrObstacle);
 
     // 随机生成食物类型
     const rand = Math.random();
@@ -465,6 +516,18 @@ function drawBoard() {
         ctx.lineTo(canvas.width, y);
         ctx.stroke();
     }
+}
+
+// 绘制障碍物
+function drawObstacles() {
+    ctx.fillStyle = '#5D4037'; // 障碍物的颜色
+    obstacles.forEach(o => {
+        // 绘制带边框的矩形，使其看起来更清晰
+        ctx.fillRect(o.x * GRID_SIZE, o.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+        ctx.strokeStyle = '#3E2723';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(o.x * GRID_SIZE, o.y * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+    });
 }
 
 // 绘制蛇
