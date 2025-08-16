@@ -5,6 +5,11 @@ const GAME_SPEED = {
     medium: 120,
     fast: 80
 };
+const FOOD_TYPES = {
+    NORMAL: { color: '#F44336', score: 10 },
+    BONUS: { color: '#FFC107', score: 50 },
+    SPEED_UP: { color: '#03A9F4', score: 10, speedMultiplier: 0.7, duration: 5000 }
+};
 
 // 游戏变量
 let canvas, ctx;
@@ -18,6 +23,7 @@ let highScore = localStorage.getItem('snakeHighScore') || 0;
 let isPaused = false;
 let gameOver = true;
 let currentSpeed = 'medium';
+let speedBoostTimeout;
 
 // DOM 元素
 let startBtn, pauseBtn, speedSelect, scoreDisplay, highScoreDisplay;
@@ -134,6 +140,7 @@ function startGame() {
     // --- 随机生成结束 ---
     
     // 重置游戏状态
+    if (speedBoostTimeout) clearTimeout(speedBoostTimeout);
     snake = snakeParts;
     direction = startDirection;
     nextDirection = startDirection;
@@ -251,6 +258,16 @@ function generateFood() {
             }
         }
     } while (foodOnSnake);
+
+    // 随机生成食物类型
+    const rand = Math.random();
+    if (rand < 0.7) { // 70% 概率为普通食物
+        newFood.type = 'NORMAL';
+    } else if (rand < 0.9) { // 20% 概率为奖励食物
+        newFood.type = 'BONUS';
+    } else { // 10% 概率为加速食物
+        newFood.type = 'SPEED_UP';
+    }
     
     food = newFood;
 }
@@ -258,8 +275,10 @@ function generateFood() {
 // 吃食物
 function eatFood() {
     playSound(eatSound);
+    const foodType = FOOD_TYPES[food.type] || FOOD_TYPES.NORMAL;
+
     // 增加分数
-    score += 10;
+    score += foodType.score;
     scoreDisplay.textContent = score;
     
     // 更新最高分
@@ -267,6 +286,22 @@ function eatFood() {
         highScore = score;
         highScoreDisplay.textContent = highScore;
         localStorage.setItem('snakeHighScore', highScore);
+    }
+
+    // 处理食物效果
+    if (food.type === 'SPEED_UP') {
+        // 清除之前的加速效果
+        if (speedBoostTimeout) clearTimeout(speedBoostTimeout);
+        
+        // 加速
+        clearInterval(gameInterval);
+        gameInterval = setInterval(gameLoop, GAME_SPEED[currentSpeed] * foodType.speedMultiplier);
+        
+        // 设置恢复速度的计时器
+        speedBoostTimeout = setTimeout(() => {
+            clearInterval(gameInterval);
+            gameInterval = setInterval(gameLoop, GAME_SPEED[currentSpeed]);
+        }, foodType.duration);
     }
     
     // 生成新的食物
@@ -276,6 +311,7 @@ function eatFood() {
 // 游戏结束
 function endGame() {
     playSound(gameOverSound);
+    if (speedBoostTimeout) clearTimeout(speedBoostTimeout);
     gameOver = true;
     pauseBtn.disabled = true;
     clearInterval(gameInterval);
@@ -496,7 +532,8 @@ function drawSnake() {
 
 // 绘制食物
 function drawFood() {
-    ctx.fillStyle = '#F44336'; // 红色食物
+    const foodType = FOOD_TYPES[food.type] || FOOD_TYPES.NORMAL;
+    ctx.fillStyle = foodType.color;
     
     // 绘制圆形食物
     ctx.beginPath();
