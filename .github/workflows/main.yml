@@ -1,0 +1,15 @@
+name: Gemini CLI
+on: pull_request
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: google-github-actions/run-gemini-cli@v0
+        with:
+          api_key: ${{ secrets.GEMINI_API_KEY }}
+          prompt: "请以一个资深前端工程师的角度，审查这个 PR 的代码，并给出简洁的改进建议。"
