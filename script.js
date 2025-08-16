@@ -49,8 +49,43 @@ window.onload = function() {
     clickSound = document.getElementById('click-sound');
     
     // 绘制初始空白游戏板
-    drawBoard();
+    // drawBoard(); // Replaced by resizeCanvas
+
+    // 新增：设置并监听窗口大小变化
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas(); // 初始加载时调整一次尺寸
 };
+
+// 新增：调整画布尺寸
+function resizeCanvas() {
+    // 让画布填充窗口，同时保持网格的整数倍
+    const width = Math.floor(window.innerWidth / GRID_SIZE) * GRID_SIZE;
+    const height = Math.floor(window.innerHeight / GRID_SIZE) * GRID_SIZE;
+    canvas.width = width;
+    canvas.height = height;
+
+    // 重新绘制游戏板（如果游戏未开始，则绘制开始画面）
+    if (gameOver) {
+        showStartScreen();
+    } else {
+        drawBoard();
+        drawSnake();
+        drawFood();
+    }
+}
+
+// 新增：显示开始画面
+function showStartScreen() {
+    drawBoard(); // 先绘制背景
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.textAlign = 'center';
+    
+    ctx.font = '40px Arial';
+    ctx.fillText('贪吃蛇', canvas.width / 2, canvas.height / 2 - 80);
+    
+    ctx.font = '20px Arial';
+    ctx.fillText('按任意键开始游戏', canvas.width / 2, canvas.height / 2);
+}
 
 // 开始游戏
 function startGame() {
@@ -235,19 +270,20 @@ function eatFood() {
 
 // 游戏结束
 function endGame() {
+    playSound(gameOverSound);
     gameOver = true;
     pauseBtn.disabled = true;
     clearInterval(gameInterval);
-    
+
     // 绘制游戏结束信息
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
+
     ctx.font = '30px Arial';
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
     ctx.fillText('游戏结束!', canvas.width / 2, canvas.height / 2 - 15);
-    
+
     ctx.font = '20px Arial';
     ctx.fillText(`最终得分: ${score}`, canvas.width / 2, canvas.height / 2 + 20);
 }
@@ -351,12 +387,26 @@ function handleKeyPress(event) {
 
 // 绘制游戏板
 function drawBoard() {
+    // --- 新增：根据分数计算背景颜色 ---
+    // 使用 HSL 颜色模型，通过改变色相来实现渐变
+    // 色相值从 0 到 360，这里我们让它随分数循环变化
+    // 初始色相（绿色系）
+    const baseHue = 130; 
+    // 分数越高，色相变化越大
+    const hue = (baseHue + score * 2) % 360;
+    const saturation = 90; // 饱和度
+    const lightness = 95;  // 亮度 (保持一个较高的亮度，使背景看起来比较柔和)
+    
+    const backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    // --- 背景颜色计算结束 ---
+
     // 清除画布
-    ctx.fillStyle = '#e8f5e9';
+    ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     // 绘制网格线（可选）
-    ctx.strokeStyle = '#c8e6c9';
+    // 为了让网格线在不同背景下都可见，可以给它一个半透明的深色
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
     ctx.lineWidth = 0.5;
     
     // 绘制垂直线

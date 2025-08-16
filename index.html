@@ -8,34 +8,29 @@
 </head>
 <body>
     <div class="game-container">
-        <h1>贪吃蛇游戏</h1>
-        <div class="game-info">
-            <div class="score">分数: <span id="score">0</span></div>
-            <div class="high-score">最高分: <span id="high-score">0</span></div>
-        </div>
-        <canvas id="game-board" width="400" height="400"></canvas>
-        <div class="controls">
-            <button id="start-btn">开始游戏</button>
-            <button id="pause-btn">暂停</button>
-            <div class="speed-control">
-                <label for="speed">速度:</label>
-                <select id="speed">
-                    <option value="slow">慢速</option>
-                    <option value="medium" selected>中速</option>
-                    <option value="fast">快速</option>
-                </select>
+        <div class="ui-container">
+            <div class="game-info">
+                <div class="score">分数: <span id="score">0</span></div>
+                <div class="high-score">最高分: <span id="high-score">0</span></div>
+            </div>
+            <div class="controls">
+                <button id="start-btn">开始游戏</button>
+                <button id="pause-btn">暂停</button>
+                <div class="speed-control">
+                    <label for="speed">速度:</label>
+                    <select id="speed">
+                        <option value="slow">慢速</option>
+                        <option value="medium" selected>中速</option>
+                        <option value="fast">快速</option>
+                    </select>
+                </div>
             </div>
         </div>
-        <div class="instructions">
-            <h3>操作说明</h3>
-            <p>使用键盘方向键或 WASD 控制蛇的移动方向</p>
-            <p>吃到食物可以增加分数和蛇的长度</p>
-            <p>撞到墙壁或自己的身体会导致游戏结束</p>
-        </div>
+        <canvas id="game-board" width="400" height="400"></canvas>
     </div>
-    <audio id="eat-sound" src="sounds/吃食物.mp3"></audio>
-    <audio id="game-over-sound" src="sounds/游戏结束.mp3"></audio>
-    <audio id="click-sound" src="sounds/按钮点击.mp3"></audio>
+    <audio id="eat-sound" src="./sounds/吃食物.mp3"></audio>
+    <audio id="game-over-sound" src="./sounds/游戏结束.mp3"></audio>
+    <audio id="click-sound" src="./sounds/按钮点击.mp3"></audio>
     <script src="script.js"></script>
 </body>
 </html>
