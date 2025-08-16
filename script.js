@@ -257,6 +257,7 @@ function generateFood() {
 
 // 吃食物
 function eatFood() {
+    playSound(eatSound);
     // 增加分数
     score += 10;
     scoreDisplay.textContent = score;
