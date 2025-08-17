@@ -29,7 +29,7 @@ const BOARD_SHRINK_THRESHOLDS = [100, 250, 500];
 let canvas, ctx;
 let snake = [];
 let food = {};
-let obstacles = [];
+let invincibilityFood = null; // 新增：无敌道具
 let direction = 'right';
 let nextDirection = 'right';
 let gameInterval;
@@ -39,14 +39,9 @@ let isPaused = false;
 let gameOver = true;
 let isCountingDown = false;
 let currentSpeed = 'medium';
+let isInvincible = false; // 新增：无敌状态
+let invincibilityTimer; // 新增：无敌计时器
 let speedBoostTimeout;
-let isInvincible = false;
-let invincibleTimeout;
-let shrinkLevel = 0;
-
-// =================================================================================
-// DOM 元素 (DOM Elements)
-// =================================================================================
 
 let startBtn, pauseBtn, speedSelect, scoreDisplay, highScoreDisplay;
 let eatSound, gameOverSound, clickSound;
@@ -95,11 +90,43 @@ function setupEventListeners() {
     speedSelect.addEventListener('change', changeSpeed);
     document.addEventListener('keydown', handleKeyPress);
     window.addEventListener('resize', resizeCanvas);
+    resizeCanvas(); // 初始加载时调整一次尺寸
+};
+
+// 新增：调整画布尺寸
+function resizeCanvas() {
+    const uiContainer = document.querySelector('.ui-container');
+    const uiHeight = uiContainer ? uiContainer.offsetHeight : 0;
+
+    // 让画布填充窗口的剩余空间，同时保持网格的整数倍
+    const width = Math.floor(window.innerWidth / GRID_SIZE) * GRID_SIZE;
+    const height = Math.floor((window.innerHeight - uiHeight) / GRID_SIZE) * GRID_SIZE;
+    
+    canvas.width = width;
+    canvas.height = height;
+
+    // 重新绘制游戏板（如果游戏未开始，则绘制开始画面）
+    if (gameOver) {
+        showStartScreen();
+    } else {
+        drawBoard();
+        drawSnake();
+        drawFood();
+        if (invincibilityFood) drawInvincibilityFood();
+    }
 }
 
 // =================================================================================
 // 游戏主流程 (Main Game Flow)
 // =================================================================================
+
+function updateUI() {
+    scoreDisplay.textContent = score;
+    highScoreDisplay.textContent = highScore;
+    startBtn.textContent = gameOver ? '开始游戏' : '重新开始';
+    pauseBtn.textContent = isPaused ? '继续' : '暂停';
+    pauseBtn.disabled = gameOver || isCountingDown;
+}
 
 /**
  * 开始一个新游戏
@@ -176,21 +203,12 @@ function initializeSnake() {
  */
 function resetGameState() {
     if (speedBoostTimeout) clearTimeout(speedBoostTimeout);
-    if (invincibleTimeout) clearTimeout(invincibleTimeout);
     score = 0;
     gameOver = false;
     isPaused = false;
     isInvincible = false;
-    shrinkLevel = 0;
-}
-
-/**
- * 更新游戏界面元素
- */
-function updateUI() {
-    scoreDisplay.textContent = score;
-    startBtn.textContent = '重新开始';
-    pauseBtn.disabled = false;
+    invincibilityFood = null;
+    clearTimeout(invincibilityTimer);
 }
 
 /**
@@ -239,23 +257,20 @@ function gameLoop() {
     } else {
         snake.pop(); // 如果没吃到食物，蛇尾缩短一格
     }
+
+    // 检查是否吃到无敌道具
+    if (invincibilityFood && snake[0].x === invincibilityFood.x && snake[0].y === invincibilityFood.y) {
+        eatInvincibilityFood();
+    }
     
-    drawGame();
+    // 绘制游戏
+    drawBoard();
+    drawSnake();
+    drawFood();
+    if (invincibilityFood) drawInvincibilityFood();
 }
 
-/**
- * 游戏结束处理
- */
-function endGame() {
-    playSound(gameOverSound);
-    if (speedBoostTimeout) clearTimeout(speedBoostTimeout);
-    if (invincibleTimeout) clearTimeout(invincibleTimeout);
-    gameOver = true;
-    isInvincible = false;
-    pauseBtn.disabled = true;
-    clearInterval(gameInterval);
-    drawGameOverScreen();
-}
+
 
 // =================================================================================
 // 蛇与食物逻辑 (Snake & Food Logic)
@@ -282,7 +297,7 @@ function moveSnake() {
  * @returns {boolean} - 如果发生碰撞则返回 true
  */
 function checkCollision() {
-    if (isInvincible) return false;
+    if (isInvincible) return false; // 如果无敌，则不检查碰撞
 
     const head = snake[0];
     
@@ -309,31 +324,80 @@ function checkCollision() {
     return false;
 }
 
-/**
- * 检查蛇头是否在食物的位置
- * @returns {boolean}
- */
-function isEatingFood() {
-    return snake[0].x === food.x && snake[0].y === food.y;
+// 生成食物
+function generateFood() {
+    // 随机生成食物位置
+    let newFood;
+    let foodOnSnake;
+    
+    do {
+        foodOnSnake = false;
+        newFood = {
+            x: Math.floor(Math.random() * (canvas.width / GRID_SIZE)),
+            y: Math.floor(Math.random() * (canvas.height / GRID_SIZE))
+        };
+        
+        // 确保食物不会生成在蛇身上
+        for (let segment of snake) {
+            if (segment.x === newFood.x && segment.y === newFood.y) {
+                foodOnSnake = true;
+                break;
+            }
+        }
+    } while (foodOnSnake);
+    
+    food = newFood;
+
+    // 每100分，有几率生成一个无敌道具
+    if (score > 0 && score % 100 === 0 && !invincibilityFood) {
+        generateInvincibilityFood();
+    }
 }
 
-/**
- * 处理吃食物的逻辑
- */
+// 新增：生成无敌道具
+function generateInvincibilityFood() {
+    let newFood;
+    let foodOnSnake;
+    
+    do {
+        foodOnSnake = false;
+        newFood = {
+            x: Math.floor(Math.random() * (canvas.width / GRID_SIZE)),
+            y: Math.floor(Math.random() * (canvas.height / GRID_SIZE))
+        };
+        
+        // 确保道具不会生成在蛇身上或普通食物上
+        if (newFood.x === food.x && newFood.y === food.y) {
+            foodOnSnake = true;
+            continue;
+        }
+        for (let segment of snake) {
+            if (segment.x === newFood.x && segment.y === newFood.y) {
+                foodOnSnake = true;
+                break;
+            }
+        }
+    } while (foodOnSnake);
+    
+    invincibilityFood = newFood;
+}
+
+
+// 吃食物
 function eatFood() {
     playSound(eatSound);
     const foodType = FOOD_TYPES[food.type] || FOOD_TYPES.NORMAL;
 
     // 增加分数并更新显示
     score += foodType.score;
-    scoreDisplay.textContent = score;
     
     // 检查并更新最高分
     if (score > highScore) {
         highScore = score;
-        highScoreDisplay.textContent = highScore;
         localStorage.setItem('snakeHighScore', highScore);
     }
+
+    updateUI();
 
     // 应用食物的特殊效果
     applyFoodEffect(foodType);
@@ -345,14 +409,43 @@ function eatFood() {
     generateFood();
 }
 
-/**
- * 检查并根据分数缩小游戏边界
- */
-function checkAndShrinkBoard() {
-    if (shrinkLevel < BOARD_SHRINK_THRESHOLDS.length && score >= BOARD_SHRINK_THRESHOLDS[shrinkLevel]) {
-        shrinkLevel++;
-        // 可选：在这里添加一个音效或视觉效果来提示玩家
-    }
+// 新增：吃无敌道具
+function eatInvincibilityFood() {
+    playSound(eatSound);
+    invincibilityFood = null;
+    isInvincible = true;
+
+    // 清除之前的计时器
+    clearTimeout(invincibilityTimer);
+
+    // 5秒后恢复正常
+    invincibilityTimer = setTimeout(() => {
+        isInvincible = false;
+    }, 5000);
+}
+
+
+// 游戏结束
+function endGame() {
+    playSound(gameOverSound);
+    if (speedBoostTimeout) clearTimeout(speedBoostTimeout);
+    clearTimeout(invincibilityTimer);
+    gameOver = true;
+    isInvincible = false;
+    clearInterval(gameInterval);
+    updateUI();
+
+    // 绘制游戏结束信息
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = '30px Arial';
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'center';
+    ctx.fillText('游戏结束!', canvas.width / 2, canvas.height / 2 - 15);
+
+    ctx.font = '20px Arial';
+    ctx.fillText(`最终得分: ${score}`, canvas.width / 2, canvas.height / 2 + 20);
 }
 
 /**
@@ -372,8 +465,8 @@ function applyFoodEffect(foodType) {
         }, foodType.duration);
     } else if (food.type === 'INVINCIBLE') {
         isInvincible = true;
-        if (invincibleTimeout) clearTimeout(invincibleTimeout);
-        invincibleTimeout = setTimeout(() => {
+        if (invincibilityTimer) clearTimeout(invincibilityTimer);
+        invincibilityTimer = setTimeout(() => {
             isInvincible = false;
         }, foodType.duration);
     }
@@ -706,7 +799,7 @@ function togglePause() {
     if (gameOver || isCountingDown) return;
 
     isPaused = !isPaused;
-    pauseBtn.textContent = isPaused ? '继续' : '暂停';
+    updateUI();
 
     clearInterval(gameInterval);
 
@@ -766,9 +859,194 @@ function resizeCanvas() {
     }
 }
 
-/**
- * 绘制圆角矩形
- */
+// 绘制游戏板
+function drawBoard() {
+    // --- 新增：根据分数计算背景颜色 ---
+    // 使用 HSL 颜色模型，通过改变色相来实现渐变
+    // 色相值从 0 到 360，这里我们让它随分数循环变化
+    // 初始色相（绿色系）
+    const baseHue = 130; 
+    // 分数越高，色相变化越大
+    const hue = (baseHue + score * 2) % 360;
+    const saturation = 90; // 饱和度
+    const lightness = 95;  // 亮度 (保持一个较高的亮度，使背景看起来比较柔和)
+    
+    const backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    // --- 背景颜色计算结束 ---
+
+    // 清除画布
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // 绘制网格线（可选）
+    // 为了让网格线在不同背景下都可见，可以给它一个半透明的深色
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+    ctx.lineWidth = 0.5;
+    
+    // 绘制垂直线
+    for (let x = 0; x <= canvas.width; x += GRID_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    
+    // 绘制水平线
+    for (let y = 0; y <= canvas.height; y += GRID_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+}
+
+// 绘制蛇
+function drawSnake() {
+    snake.forEach((segment, index) => {
+        // 如果无敌，蛇会闪烁
+        if (isInvincible) {
+            ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 100) * 0.2;
+        }
+        
+        // 蛇头使用深绿色，身体使用绿色
+        ctx.fillStyle = index === 0 ? '#388E3C' : '#4CAF50';
+        
+        // 绘制圆角矩形作为蛇的身体部分
+        roundRect(
+            ctx,
+            segment.x * GRID_SIZE,
+            segment.y * GRID_SIZE,
+            GRID_SIZE,
+            GRID_SIZE,
+            5,
+            true
+        );
+        
+        // 恢复透明度
+        ctx.globalAlpha = 1.0;
+
+        // 为蛇头添加眼睛
+        if (index === 0) {
+            ctx.fillStyle = 'white';
+            
+            // 根据方向绘制眼睛
+            const eyeSize = GRID_SIZE / 5;
+            const eyeOffset = GRID_SIZE / 3;
+            
+            // 左眼
+            let leftEyeX, leftEyeY;
+            // 右眼
+            let rightEyeX, rightEyeY;
+            
+            switch(direction) {
+                case 'up':
+                    leftEyeX = segment.x * GRID_SIZE + eyeOffset;
+                    leftEyeY = segment.y * GRID_SIZE + eyeOffset;
+                    rightEyeX = segment.x * GRID_SIZE + GRID_SIZE - eyeOffset - eyeSize;
+                    rightEyeY = segment.y * GRID_SIZE + eyeOffset;
+                    break;
+                case 'down':
+                    leftEyeX = segment.x * GRID_SIZE + GRID_SIZE - eyeOffset - eyeSize;
+                    leftEyeY = segment.y * GRID_SIZE + GRID_SIZE - eyeOffset - eyeSize;
+                    rightEyeX = segment.x * GRID_SIZE + eyeOffset;
+                    rightEyeY = segment.y * GRID_SIZE + GRID_SIZE - eyeOffset - eyeSize;
+                    break;
+                case 'left':
+                    leftEyeX = segment.x * GRID_SIZE + eyeOffset;
+                    leftEyeY = segment.y * GRID_SIZE + eyeOffset;
+                    rightEyeX = segment.x * GRID_SIZE + eyeOffset;
+                    rightEyeY = segment.y * GRID_SIZE + GRID_SIZE - eyeOffset - eyeSize;
+                    break;
+                case 'right':
+                    leftEyeX = segment.x * GRID_SIZE + GRID_SIZE - eyeOffset - eyeSize;
+                    leftEyeY = segment.y * GRID_SIZE + eyeOffset;
+                    rightEyeX = segment.x * GRID_SIZE + GRID_SIZE - eyeOffset - eyeSize;
+                    rightEyeY = segment.y * GRID_SIZE + GRID_SIZE - eyeOffset - eyeSize;
+                    break;
+            }
+            
+            ctx.fillRect(leftEyeX, leftEyeY, eyeSize, eyeSize);
+            ctx.fillRect(rightEyeX, rightEyeY, eyeSize, eyeSize);
+        }
+    });
+}
+
+// 绘制食物
+function drawFood() {
+    ctx.fillStyle = '#F44336'; // 红色食物
+    
+    // 绘制圆形食物
+    ctx.beginPath();
+    ctx.arc(
+        food.x * GRID_SIZE + GRID_SIZE / 2,
+        food.y * GRID_SIZE + GRID_SIZE / 2,
+        GRID_SIZE / 2 - 2,
+        0,
+        Math.PI * 2
+    );
+    ctx.fill();
+    
+    // 添加高光效果
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.beginPath();
+    ctx.arc(
+        food.x * GRID_SIZE + GRID_SIZE / 3,
+        food.y * GRID_SIZE + GRID_SIZE / 3,
+        GRID_SIZE / 6,
+        0,
+        Math.PI * 2
+    );
+    ctx.fill();
+}
+
+// 新增：绘制无敌道具
+function drawInvincibilityFood() {
+    const x = invincibilityFood.x * GRID_SIZE + GRID_SIZE / 2;
+    const y = invincibilityFood.y * GRID_SIZE + GRID_SIZE / 2;
+    const radius = GRID_SIZE / 2 - 2;
+    
+    // 绘制一个闪烁的星星
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Date.now() / 500); // 旋转
+    
+    ctx.fillStyle = `hsl(${Date.now() / 10 % 360}, 100%, 50%)`; // 彩虹色
+    ctx.strokeStyle = 'gold';
+    ctx.lineWidth = 2;
+    
+    drawStar(0, 0, 5, radius, radius / 2);
+    
+    ctx.restore();
+}
+
+// 新增：绘制星星的辅助函数
+function drawStar(cx, cy, spikes, outerRadius, innerRadius) {
+    let rot = Math.PI / 2 * 3;
+    let x = cx;
+    let y = cy;
+    let step = Math.PI / spikes;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerRadius);
+    for (let i = 0; i < spikes; i++) {
+        x = cx + Math.cos(rot) * outerRadius;
+        y = cy + Math.sin(rot) * outerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+
+        x = cx + Math.cos(rot) * innerRadius;
+        y = cy + Math.sin(rot) * innerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+    }
+    ctx.lineTo(cx, cy - outerRadius);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+}
+
+
+// 辅助函数：绘制圆角矩形
 function roundRect(ctx, x, y, width, height, radius, fill) {
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
@@ -782,6 +1060,9 @@ function roundRect(ctx, x, y, width, height, radius, fill) {
     ctx.quadraticCurveTo(x, y, x + radius, y);
     ctx.closePath();
     
-    if (fill) ctx.fill();
-    else ctx.stroke();
+    if (fill) {
+        ctx.fill();
+    } else {
+        ctx.stroke();
+    }
 }
