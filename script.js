@@ -42,6 +42,8 @@ let currentSpeed = 'medium';
 let isInvincible = false; // 新增：无敌状态
 let invincibilityTimer; // 新增：无敌计时器
 let speedBoostTimeout;
+let shrinkLevel = 0;
+let obstacles = [];
 
 let startBtn, pauseBtn, speedSelect, scoreDisplay, highScoreDisplay;
 let eatSound, gameOverSound, clickSound;
@@ -265,6 +267,7 @@ function gameLoop() {
     
     // 绘制游戏
     drawBoard();
+    drawObstacles();
     drawSnake();
     drawFood();
     if (invincibilityFood) drawInvincibilityFood();
@@ -383,6 +386,12 @@ function generateInvincibilityFood() {
 }
 
 
+function isEatingFood() {
+    const head = snake[0];
+    return head.x === food.x && head.y === food.y;
+}
+
+
 // 吃食物
 function eatFood() {
     playSound(eatSound);
@@ -407,6 +416,13 @@ function eatFood() {
     
     // 生成新的食物
     generateFood();
+}
+
+function checkAndShrinkBoard() {
+    const newShrinkLevel = BOARD_SHRINK_THRESHOLDS.filter(t => score >= t).length;
+    if (newShrinkLevel > shrinkLevel) {
+        shrinkLevel = newShrinkLevel;
+    }
 }
 
 // 新增：吃无敌道具
