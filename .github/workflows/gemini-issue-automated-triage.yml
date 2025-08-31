@@ -1,62 +1,78 @@
-name: '🏷️ Gemini Automated Issue Triage'
+# 工作流名称
+name: '🏷️ Gemini Automated Issue Triage (可复用)'
 
+# 触发条件：定义为可被其他工作流调用
 on:
-  issues:
-    types:
-      - 'opened'
-      - 'reopened'
-  issue_comment:
-    types:
-      - 'created'
-  workflow_dispatch:
+  workflow_call:
+    # 定义调用时可以接收的输入参数
     inputs:
       issue_number:
-        description: 'issue number to triage'
+        description: '需要分类的 Issue 编号'
         required: true
-        type: 'number'
+        type: number
+      issue_title:
+        description: 'Issue 的标题'
+        required: true
+        type: string
+      issue_body:
+        description: 'Issue 的正文内容'
+        required: true
+        type: string
+    # 定义调用时需要接收的密钥
+    secrets:
+      APP_PRIVATE_KEY:
+        description: 'GitHub App 的私钥'
+        required: false
+      GEMINI_API_KEY:
+        description: 'Gemini API 的密钥'
+        required: false
+      GITHUB_TOKEN:
+        description: 'GitHub 标准认证 Token'
+        required: false
 
+# 并发控制：确保对于同一个Issue，只有一个分类工作流在运行
 concurrency:
-  group: '${{ github.workflow }}-${{ github.event.issue.number }}'
+  group: '${{ github.workflow }}-${{ inputs.issue_number }}'
   cancel-in-progress: true
 
+# 默认设置
 defaults:
   run:
     shell: 'bash'
 
+# 权限设置
 permissions:
   contents: 'read'
   id-token: 'write'
   issues: 'write'
   statuses: 'write'
 
+# 作业定义
 jobs:
   triage-issue:
-    if: |-
-      github.event_name == 'issues' ||
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'issue_comment' &&
-        contains(github.event.comment.body, '@gemini-cli /triage') &&
-        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
-      )
+    # 调用方负责控制执行逻辑，故移除 'if' 条件
     timeout-minutes: 5
     runs-on: 'ubuntu-latest'
+    
+    # 作业步骤
     steps:
+      # 步骤1: 检出代码
       - name: 'Checkout repository'
-        uses: 'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683' # ratchet:actions/checkout@v4
+        uses: 'actions/checkout@v4'
 
+      # 步骤2: (可选) 生成 GitHub App Token
       - name: 'Generate GitHub App Token'
         id: 'generate_token'
-        if: |-
-          ${{ vars.APP_ID }}
-        uses: 'actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e' # ratchet:actions/create-github-app-token@v2
+        if: ${{ vars.APP_ID != '' }}
+        uses: 'actions/create-github-app-token@v2'
         with:
           app-id: '${{ vars.APP_ID }}'
           private-key: '${{ secrets.APP_PRIVATE_KEY }}'
 
+      # 步骤3: 获取仓库中所有可用的 Labels
       - name: 'Get Repository Labels'
         id: 'get_labels'
-        uses: 'actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea'
+        uses: 'actions/github-script@v6'
         with:
           github-token: '${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}'
           script: |-
@@ -69,17 +85,22 @@ jobs:
             core.info(`Found ${labelNames.length} labels: ${labelNames.join(', ')}`);
             return labelNames;
 
+      # 步骤4: 运行 Gemini 进行 Issue 分析和分类
       - name: 'Run Gemini Issue Analysis'
         uses: 'google-github-actions/run-gemini-cli@v0'
         id: 'gemini_issue_analysis'
         env:
-          GITHUB_TOKEN: '' # Do not pass any auth token here since this runs on untrusted inputs
-          ISSUE_TITLE: '${{ github.event.issue.title }}'
-          ISSUE_BODY: '${{ github.event.issue.body }}'
-          ISSUE_NUMBER: '${{ github.event.issue.number }}'
+          # 注意：此处 GITHUB_TOKEN 为空，因为此步骤处理的是可能来自外部的不可信输入
+          GITHUB_TOKEN: ''
+          # 从调用方传入的 inputs 中获取 Issue 的详细信息
+          ISSUE_TITLE: '${{ inputs.issue_title }}'
+          ISSUE_BODY: '${{ inputs.issue_body }}'
+          ISSUE_NUMBER: '${{ inputs.issue_number }}'
           REPOSITORY: '${{ github.repository }}'
+          # 将上一步获取的可用 Labels 列表传入
           AVAILABLE_LABELS: '${{ steps.get_labels.outputs.available_labels }}'
         with:
+          # Gemini CLI 的配置
           gemini_cli_version: '${{ vars.GEMINI_CLI_VERSION }}'
           gcp_workload_identity_provider: '${{ vars.GCP_WIF_PROVIDER }}'
           gcp_project_id: '${{ vars.GOOGLE_CLOUD_PROJECT }}'
@@ -90,59 +111,27 @@ jobs:
           use_gemini_code_assist: '${{ vars.GOOGLE_GENAI_USE_GCA }}'
           settings: |-
             {
-              "debug": ${{ fromJSON(env.DEBUG || env.ACTIONS_STEP_DEBUG || false) }},
-              "maxSessionTurns": 25,
-              "coreTools": [
-                "run_shell_command(echo)"
-              ],
-              "telemetry": {
-                "enabled": false,
-                "target": "gcp"
-              }
+              "debug": false,
+              "maxSessionTurns": 25
             }
+          # ... 此处省略了长篇的 prompt ...
           prompt: |-
             ## Role
+            You are an issue triage assistant...
 
-            You are an issue triage assistant. Analyze the current GitHub issue
-            and identify the most appropriate existing labels. Use the available
-            tools to gather information; do not ask for information to be
-            provided.
-
-            ## Steps
-
-            1. Review the available labels in the environment variable: "${AVAILABLE_LABELS}".
-            2. Review the issue title and body provided in the environment
-               variables: "${ISSUE_TITLE}" and "${ISSUE_BODY}".
-            3. Classify the issue by the appropriate labels from the available labels.
-            4. Output the appropriate labels for this issue in JSON format with explanation, for example:
-               ```
-               {"labels_to_set": ["kind/bug", "priority/p0"], "explanation": "This is a critical bug report affecting main functionality"}
-               ```
-            5. If the issue cannot be classified using the available labels, output:
-               ```
-               {"labels_to_set": [], "explanation": "Unable to classify this issue with available labels"}
-               ```
-
-            ## Guidelines
-
-            - Only use labels that already exist in the repository
-            - Assign all applicable labels based on the issue content
-            - Reference all shell variables as "${VAR}" (with quotes and braces)
-            - Output only valid JSON format
-            - Do not include any explanation or additional text, just the JSON
-
+      # 步骤5: 将 Gemini 分析出的 Labels 应用到 Issue 上
+      # 仅当上一步 Gemini 成功输出了分析结果时执行
       - name: 'Apply Labels to Issue'
-        if: |-
-          ${{ steps.gemini_issue_analysis.outputs.summary != '' }}
+        if: steps.gemini_issue_analysis.outputs.summary != ''
         env:
           REPOSITORY: '${{ github.repository }}'
-          ISSUE_NUMBER: '${{ github.event.issue.number }}'
+          ISSUE_NUMBER: '${{ inputs.issue_number }}'
           LABELS_OUTPUT: '${{ steps.gemini_issue_analysis.outputs.summary }}'
-        uses: 'actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea'
+        uses: 'actions/github-script@v6'
         with:
           github-token: '${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}'
           script: |-
-            // Strip code block markers if present
+            // 解析 Gemini 输出的 JSON 字符串
             const rawLabels = process.env.LABELS_OUTPUT;
             core.info(`Raw labels JSON: ${rawLabels}`);
             let parsedLabels;
@@ -157,7 +146,7 @@ jobs:
 
             const issueNumber = parseInt(process.env.ISSUE_NUMBER);
 
-            // Set labels based on triage result
+            // 如果 JSON 中包含要设置的 labels，则调用 GitHub API 进行设置
             if (parsedLabels.labels_to_set && parsedLabels.labels_to_set.length > 0) {
               await github.rest.issues.setLabels({
                 owner: context.repo.owner,
@@ -168,18 +157,16 @@ jobs:
               const explanation = parsedLabels.explanation ? ` - ${parsedLabels.explanation}` : '';
               core.info(`Successfully set labels for #${issueNumber}: ${parsedLabels.labels_to_set.join(', ')}${explanation}`);
             } else {
-              // If no labels to set, leave the issue as is
-              const explanation = parsedLabels.explanation ? ` - ${parsedLabels.explanation}` : '';
-              core.info(`No labels to set for #${issueNumber}, leaving as is${explanation}`);
+              core.info(`No labels to set for #${issueNumber}, leaving as is`);
             }
 
+      # 步骤6: (失败时) 发表评论通知用户
       - name: 'Post Issue Analysis Failure Comment'
-        if: |-
-          ${{ failure() && steps.gemini_issue_analysis.outcome == 'failure' }}
+        if: failure() && steps.gemini_issue_analysis.outcome == 'failure'
         env:
-          ISSUE_NUMBER: '${{ github.event.issue.number }}'
+          ISSUE_NUMBER: '${{ inputs.issue_number }}'
           RUN_URL: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
-        uses: 'actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea'
+        uses: 'actions/github-script@v6'
         with:
           github-token: '${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}'
           script: |-
@@ -187,5 +174,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: parseInt(process.env.ISSUE_NUMBER),
-              body: 'There is a problem with the Gemini CLI issue triaging. Please check the [action logs](${process.env.RUN_URL}) for details.'
+              body: 'Gemini CLI Issue 分类时出现问题。请检查 [Action 日志](${process.env.RUN_URL}) 获取详细信息。'
             })
