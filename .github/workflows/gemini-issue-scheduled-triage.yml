@@ -13,9 +13,6 @@ on:
       GEMINI_API_KEY:
         description: 'Gemini API 的密钥'
         required: false
-      GITHUB_TOKEN:
-        description: 'GitHub 标准认证 Token'
-        required: false
 
 # 并发控制：确保同一时间只有一个计划任务在运行
 concurrency:

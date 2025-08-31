@@ -18,9 +18,6 @@ on:
       GEMINI_API_KEY:
         description: '调用 Gemini API 所需的密钥'
         required: false # 非必须，但如果需要使用 Gemini API 则为必须
-      GITHUB_TOKEN:
-        description: 'GitHub 提供的标准认证 Token'
-        required: false # 非必须
 
 # 并发控制：确保对于同一个PR，只有一个审查工作流在运行
 concurrency:

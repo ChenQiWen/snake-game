@@ -26,9 +26,6 @@ on:
       GEMINI_API_KEY:
         description: 'Gemini API 的密钥'
         required: false
-      GITHUB_TOKEN:
-        description: 'GitHub 标准认证 Token'
-        required: false
 
 # 并发控制：确保对同一个 Issue/PR 的处理不会重复执行
 concurrency:
